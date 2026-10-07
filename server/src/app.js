@@ -5,6 +5,7 @@ const { notFoundHandler, errorHandler } = require('./middleware/error.middleware
 
 // Routes
 const healthRoute = require('./routes/health.route');
+const authRoute = require('./routes/auth.route');
 
 const app = express();
 
@@ -22,6 +23,7 @@ if (process.env.NODE_ENV === 'development') {
 
 // API Routes
 app.use('/api/health', healthRoute);
+app.use('/api/auth', authRoute);
 
 // 404 Handler
 app.use(notFoundHandler);

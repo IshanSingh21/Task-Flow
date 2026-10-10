@@ -1,30 +1,40 @@
-import { useState, useEffect } from 'react'
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
+import { OrgProvider } from './context/OrgContext';
 
-function App() {
-  const [status, setStatus] = useState('Loading backend status...')
+import AuthLayout from './layouts/AuthLayout';
+import DashboardLayout from './layouts/DashboardLayout';
 
-  useEffect(() => {
-    fetch('http://localhost:5000/api/health')
-      .then(res => res.json())
-      .then(data => setStatus(`Backend is ${data.message}`))
-      .catch(err => setStatus('Backend is offline or unreachable'))
-  }, [])
+import Login from './pages/Login';
+import Register from './pages/Register';
+import Dashboard from './pages/Dashboard';
+import Organizations from './pages/Organizations';
+import OrgDetails from './pages/OrgDetails';
+import ProjectDetails from './pages/ProjectDetails';
 
+export default function App() {
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
-      <div className="bg-white p-8 rounded-lg shadow-md max-w-md w-full text-center">
-        <h1 className="text-3xl font-bold text-blue-600 mb-4">TaskFlow</h1>
-        <p className="text-gray-600 mb-6">Project & Team Management Platform</p>
-        
-        <div className="p-4 bg-gray-50 rounded border border-gray-200">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">System Status</h2>
-          <p className={`text-sm ${status.includes('offline') ? 'text-red-500' : 'text-green-500'}`}>
-            {status}
-          </p>
-        </div>
-      </div>
-    </div>
-  )
-}
+    <AuthProvider>
+      <OrgProvider>
+        <Router>
+          <Routes>
+            <Route element={<AuthLayout />}>
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+            </Route>
 
-export default App
+            <Route element={<DashboardLayout />}>
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/organizations" element={<Organizations />} />
+              <Route path="/organizations/:id" element={<OrgDetails />} />
+              <Route path="/projects/:id" element={<ProjectDetails />} />
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            </Route>
+            
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Routes>
+        </Router>
+      </OrgProvider>
+    </AuthProvider>
+  );
+}

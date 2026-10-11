@@ -1,4 +1,5 @@
 const prisma = require('../config/prisma');
+const CacheService = require('../services/cache.service');
 const { successResponse, errorResponse } = require('../utils/response.util');
 
 const createOrganization = async (req, res, next) => {
@@ -21,6 +22,9 @@ const createOrganization = async (req, res, next) => {
       }
     });
 
+    // Invalidate user's organization list cache
+    await CacheService.del(`user:${userId}:organizations`);
+
     return successResponse(res, 201, 'Organization created successfully', { organization: org });
   } catch (error) {
     next(error);
@@ -29,6 +33,16 @@ const createOrganization = async (req, res, next) => {
 
 const getOrganizations = async (req, res, next) => {
   try {
+    const cacheKey = `user:${req.user.id}:organizations`;
+    
+    // Performance Optimization: Check Redis first
+    const cachedOrgs = await CacheService.get(cacheKey);
+    if (cachedOrgs) {
+      res.setHeader('X-Cache', 'HIT');
+      return successResponse(res, 200, 'Organizations retrieved (from cache)', { organizations: cachedOrgs });
+    }
+
+    // Cache MISS: Query PostgreSQL
     const orgs = await prisma.organization.findMany({
       where: {
         members: {
@@ -45,6 +59,10 @@ const getOrganizations = async (req, res, next) => {
       }
     });
 
+    // Cache result with 15-minute TTL
+    await CacheService.set(cacheKey, orgs, 900);
+
+    res.setHeader('X-Cache', 'MISS');
     return successResponse(res, 200, 'Organizations retrieved', { organizations: orgs });
   } catch (error) {
     next(error);
@@ -53,12 +71,25 @@ const getOrganizations = async (req, res, next) => {
 
 const getOrganizationById = async (req, res, next) => {
   try {
+    const cacheKey = `org:${req.orgId}:details`;
+
+    const cachedOrg = await CacheService.get(cacheKey);
+    if (cachedOrg) {
+      res.setHeader('X-Cache', 'HIT');
+      return successResponse(res, 200, 'Organization details (from cache)', { organization: cachedOrg });
+    }
+
     const org = await prisma.organization.findUnique({
       where: { id: req.orgId },
       include: {
         _count: { select: { members: true, projects: true } }
       }
     });
+
+    // Cache for 10 minutes
+    await CacheService.set(cacheKey, org, 600);
+
+    res.setHeader('X-Cache', 'MISS');
     return successResponse(res, 200, 'Organization details', { organization: org });
   } catch (error) {
     next(error);
@@ -68,6 +99,11 @@ const getOrganizationById = async (req, res, next) => {
 const deleteOrganization = async (req, res, next) => {
   try {
     await prisma.organization.delete({ where: { id: req.orgId } });
+
+    // Invalidate caches for all members who had this org
+    await CacheService.delPattern('user:*:organizations');
+    await CacheService.del(`org:${req.orgId}:details`);
+
     return successResponse(res, 200, 'Organization deleted');
   } catch (error) {
     next(error);
@@ -104,6 +140,10 @@ const addMember = async (req, res, next) => {
       },
       include: { user: { select: { id: true, name: true, email: true } } }
     });
+
+    // Invalidate caches
+    await CacheService.del(`user:${userToAdd.id}:organizations`);
+    await CacheService.del(`org:${req.orgId}:details`);
 
     return successResponse(res, 201, 'Member added', { member });
   } catch (error) {
@@ -147,6 +187,10 @@ const removeMember = async (req, res, next) => {
       where: { userId_organizationId: { userId, organizationId: req.orgId } }
     });
 
+    // Invalidate caches
+    await CacheService.del(`user:${userId}:organizations`);
+    await CacheService.del(`org:${req.orgId}:details`);
+
     return successResponse(res, 200, 'Member removed');
   } catch (error) {
     next(error);
@@ -175,6 +219,9 @@ const changeRole = async (req, res, next) => {
       data: { role }
     });
 
+    // Invalidate caller org list since roles might be displayed there
+    await CacheService.del(`user:${userId}:organizations`);
+
     return successResponse(res, 200, 'Role updated successfully');
   } catch (error) {
     next(error);
@@ -195,6 +242,10 @@ const leaveOrganization = async (req, res, next) => {
     await prisma.organizationMember.delete({
       where: { userId_organizationId: { userId: req.user.id, organizationId: req.orgId } }
     });
+
+    // Invalidate user's organization list and details
+    await CacheService.del(`user:${req.user.id}:organizations`);
+    await CacheService.del(`org:${req.orgId}:details`);
 
     return successResponse(res, 200, 'Successfully left organization');
   } catch (error) {

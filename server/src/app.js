@@ -1,9 +1,13 @@
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const morgan = require('morgan');
+
+const requestIdMiddleware = require('./middleware/requestId.middleware');
+const { apiLimiter } = require('./middleware/rateLimit.middleware');
 const { notFoundHandler, errorHandler } = require('./middleware/error.middleware');
 
-// Routes
+// Route modules
 const healthRoute = require('./routes/health.route');
 const authRoute = require('./routes/auth.route');
 const orgRoute = require('./routes/org.route');
@@ -12,29 +16,80 @@ const taskRoute = require('./routes/task.route');
 
 const app = express();
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// 1. Traceability: Assign Request ID first to trace through all middlewares
+app.use(requestIdMiddleware);
 
-// Request Logging
-if (process.env.NODE_ENV === 'development') {
-  app.use(morgan('dev'));
-} else {
-  app.use(morgan('combined'));
+// 2. Security Headers
+app.use(helmet({
+  contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false,
+  crossOriginEmbedderPolicy: false
+}));
+
+// 3. CORS Configuration
+const allowedOrigins = process.env.CLIENT_URL ? [process.env.CLIENT_URL] : ['http://localhost:5173', 'http://localhost:3000'];
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow non-browser requests or allowed origins
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('CORS origin denied'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id', 'X-Test-Rate-Limit']
+}));
+
+// 4. Request Size Limits (prevents DoS through large payloads)
+app.use(express.json({ limit: '50kb' }));
+app.use(express.urlencoded({ extended: true, limit: '50kb' }));
+
+// 5. Structured Logging
+morgan.token('id', (req) => req.id);
+morgan.token('client-ip', (req) => req.ip || req.connection.remoteAddress);
+
+if (process.env.NODE_ENV !== 'test') {
+  if (process.env.NODE_ENV === 'production') {
+    // Structured JSON log format for production log forwarders
+    app.use(morgan((tokens, req, res) => {
+      return JSON.stringify({
+        timestamp: tokens.date(req, res, 'iso'),
+        requestId: tokens.id(req, res),
+        ip: tokens['client-ip'](req, res),
+        method: tokens.method(req, res),
+        url: tokens.url(req, res),
+        status: Number(tokens.status(req, res)),
+        responseTimeMs: Number(tokens['response-time'](req, res)),
+        contentLength: tokens.res(req, res, 'content-length')
+      });
+    }));
+  } else {
+    // Concise readable format for development
+    app.use(morgan(':id :method :url :status :response-time ms - :res[content-length]'));
+  }
 }
 
-// API Routes
-app.use('/api/health', healthRoute);
-app.use('/api/auth', authRoute);
-app.use('/api/organizations', orgRoute);
-app.use('/api/projects', projectRoute);
-app.use('/api/tasks', taskRoute);
+// 6. Global Rate Limiter
+app.use('/api', apiLimiter);
 
-// 404 Handler
+// 7. API Versioning (v1 primary, /api backward-compatible alias)
+const registerRoutes = (routerPrefix) => {
+  app.use(`${routerPrefix}/health`, healthRoute);
+  app.use(`${routerPrefix}/auth`, authRoute);
+  app.use(`${routerPrefix}/organizations`, orgRoute);
+  app.use(`${routerPrefix}/projects`, projectRoute);
+  app.use(`${routerPrefix}/tasks`, taskRoute);
+};
+
+// Mount version 1 endpoints
+registerRoutes('/api/v1');
+
+// Backward compatibility mount
+registerRoutes('/api');
+
+// 8. 404 & Centralized Error Handlers
 app.use(notFoundHandler);
-
-// Global Error Handler
 app.use(errorHandler);
 
 module.exports = app;

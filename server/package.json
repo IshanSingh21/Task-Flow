@@ -7,6 +7,9 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "test": "jest",
+    "test:unit": "jest tests/unit",
+    "test:integration": "jest --testPathIgnorePatterns=tests/unit",
+    "test:coverage": "jest --coverage",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy"
   },

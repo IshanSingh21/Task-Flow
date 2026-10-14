@@ -35,10 +35,12 @@ try {
     isRedisConnected = false;
   });
 
-  // Initiate connection in background
-  redisClient.connect().catch((err) => {
-    console.warn('[Redis] Initial connection failed. Operating in cache-bypass mode:', err.message);
-  });
+  // Initiate connection in background if not in test environment
+  if (process.env.NODE_ENV !== 'test') {
+    redisClient.connect().catch((err) => {
+      console.warn('[Redis] Initial connection failed. Operating in cache-bypass mode:', err.message);
+    });
+  }
 } catch (error) {
   console.warn('[Redis] Initialization failed:', error.message);
 }

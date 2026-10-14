@@ -27,6 +27,7 @@ export default function App() {
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/organizations" element={<Organizations />} />
               <Route path="/organizations/:id" element={<OrgDetails />} />
+              <Route path="/organizations/:id/members" element={<OrgDetails />} />
               <Route path="/projects/:id" element={<ProjectDetails />} />
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
             </Route>

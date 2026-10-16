@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import { Plus, Search, Filter, Trash2, Edit2, UserCheck, X } from 'lucide-react';
+import { Plus, Search, Filter, Trash2, Edit2, X } from 'lucide-react';
 import api from '../services/api';
 
 const COLUMNS = ['TODO', 'IN_PROGRESS', 'IN_REVIEW', 'DONE'];

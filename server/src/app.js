@@ -26,7 +26,11 @@ app.use(helmet({
 }));
 
 // 3. CORS Configuration
-const allowedOrigins = process.env.CLIENT_URL ? [process.env.CLIENT_URL] : ['http://localhost:5173', 'http://localhost:3000'];
+const frontendUrls = (process.env.FRONTEND_URL || process.env.CLIENT_URL || '')
+  .split(',')
+  .map(url => url.trim())
+  .filter(Boolean);
+const allowedOrigins = frontendUrls.length > 0 ? frontendUrls : ['http://localhost:5173', 'http://localhost:3000'];
 app.use(cors({
   origin: (origin, callback) => {
     // Allow non-browser requests or allowed origins
